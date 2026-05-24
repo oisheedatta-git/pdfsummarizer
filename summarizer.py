@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.prompts import PromptTemplate
+#from langchain.chains.llm import LLMChain
 from typing import List, Dict
 import time
 
@@ -71,14 +71,14 @@ Executive Summary:"""
         if summary_type not in self.summary_prompts:
             summary_type = 'detailed'
 
-        chain = LLMChain(
-            llm=self.llm,
-            prompt=self.summary_prompts[summary_type]
-        )
+        chain = self.summary_prompts[summary_type] | self.llm
 
         try:
-            summary = chain.run(text=text)
+            response = chain.invoke({"text": text})
+
+            summary = response.content
             return summary
+
         except Exception as e:
             return f"Error generating summary: {str(e)}"
 
@@ -136,11 +136,21 @@ Section Summaries:
 Final Cohesive Summary:"""
         )
 
-        meta_chain = LLMChain(llm=self.llm, prompt=meta_prompt)
+       # meta_chain = LLMChain(llm=self.llm, prompt=meta_prompt)
 
+      #  try:
+         #   final_summary = meta_chain.run(summaries=combined_text, summary_type=summary_type)
+
+        meta_chain = meta_prompt | self.llm
         try:
-            final_summary = meta_chain.run(summaries=combined_text, summary_type=summary_type)
+            response = meta_chain.invoke({
+                "summaries": combined_text,
+                "summary_type": summary_type
+            })
+
+            final_summary = response.content
             return final_summary
+
         except Exception as e:
             return f"Combined Summary:\n\n{combined_text}"
 
@@ -161,31 +171,57 @@ Text: {text}
 Document Analysis:"""
         )
 
-        analysis_chain = LLMChain(llm=self.llm, prompt=analysis_prompt)
+        #analysis_chain = LLMChain(llm=self.llm, prompt=analysis_prompt)
+
+        #try:
+            #analysis = analysis_chain.run(text=text[:3000])
+        analysis_chain = analysis_prompt | self.llm
 
         try:
-            analysis = analysis_chain.run(text=text[:3000])
-            return {'analysis': analysis, 'status': 'success'}
+            response = analysis_chain.invoke({
+                "text": text[:3000]
+            })
+
+            analysis = response.content
+
+            return {
+                'analysis': analysis,
+                'status': 'success'
+            }
+
         except Exception as e:
-            return {'analysis': f"Error analyzing document: {str(e)}", 'status': 'error'}
+            return {
+                'analysis': f"Error analyzing document: {str(e)}",
+                'status': 'error'
+            }
 
     def extract_key_quotes(self, text: str) -> List[str]:
         quotes_prompt = PromptTemplate(
             input_variables=["text"],
             template="""
-Extract 5-10 key quotes, statements, or important phrases from this text.
-Choose quotes that best represent the main ideas or are particularly insightful.
+    Extract 5-10 key quotes, statements, or important phrases from this text.
+    Choose quotes that best represent the main ideas or are particularly insightful.
 
-Text: {text}
+    Text: {text}
 
-Key Quotes (one per line):"""
+    Key Quotes (one per line):
+    """
         )
 
-        quotes_chain = LLMChain(llm=self.llm, prompt=quotes_prompt)
+        quotes_chain = quotes_prompt | self.llm
 
         try:
-            quotes_response = quotes_chain.run(text=text)
-            quotes = [quote.strip() for quote in quotes_response.split('\n') if quote.strip()]
+            response = quotes_chain.invoke({"text": text})
+
+            quotes_response = response.content
+
+            quotes = [
+                quote.strip()
+                for quote in quotes_response.split('\n')
+                if quote.strip()
+            ]
+
             return quotes[:10]
+
         except Exception as e:
             return [f"Error extracting quotes: {str(e)}"]
